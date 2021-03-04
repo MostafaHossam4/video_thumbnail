@@ -30,7 +30,8 @@ import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
-
+import java.sql.Timestamp;
+import java.util.Random;
 /**
  * VideoThumbnailPlugin
  */
@@ -132,7 +133,8 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
         final byte bytes[] = buildThumbnailData(vidPath, format, maxh, maxw, timeMs, quality);
         final String ext = formatExt(format);
         final int i = vidPath.lastIndexOf(".");
-        String fullpath = vidPath.substring(0, i + 1) + ext;
+        String fullpath =path + String.valueOf((Math.random() * 99999)) + "." + ext;
+        
 
         if (path != null) {
             if (path.endsWith(ext)) {
@@ -208,7 +210,7 @@ public class VideoThumbnailPlugin implements MethodCallHandler {
             if (targetH != 0 || targetW != 0) {
                 if (android.os.Build.VERSION.SDK_INT >= 27 && targetH != 0 && targetW != 0) {
                     // API Level 27
-                    bitmap = retriever.getScaledFrameAtTime(timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, targetW, targetH);
+                    bitmap = retriever.getScaledFrameAtTime(timeMs * 1000, 0, targetW, targetH);
                 } else {
                     bitmap = retriever.getFrameAtTime(timeMs * 1000);
                     if (bitmap != null) {
