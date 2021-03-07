@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #import "VideoThumbnailPlugin.h"
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
@@ -24,9 +25,9 @@
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
-    
+
     NSDictionary *_args = call.arguments;
-    
+
     NSString *file = _args[@"video"];
     NSString *path = _args[@"path"];
     int format = [[_args objectForKey:@"format"] intValue];
@@ -35,23 +36,23 @@
     int timeMs = [[_args objectForKey:@"timeMs"] intValue];
     int quality = [[_args objectForKey:@"quality"] intValue];
     _args = nil;
-    
+
     NSURL *url = [file hasPrefix:@"file://"] ? [NSURL fileURLWithPath:[file substringFromIndex:7]] :
       ( [file hasPrefix:@"/"] ? [NSURL fileURLWithPath:file] : [NSURL URLWithString:file] );
-    
+
     if ([@"data" isEqualToString:call.method]) {
-        
+
         dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(void){
             //Background Thread
             result([VideoThumbnailPlugin generateThumbnail:url format:format maxHeight:maxh maxWidth:maxw timeMs:timeMs quality:quality]);
 
         });
-        
+
     } else if ([@"file" isEqualToString:call.method]) {
-        
+
         dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(void){
             //Background Thread
-           
+
             NSData *data = [VideoThumbnailPlugin generateThumbnail:url format:format maxHeight:maxh maxWidth:maxw timeMs:timeMs quality:quality];
             NSString *ext = ( (format == 0 ) ? @"jpg" : ( format == 1 ) ? @"png" : @"webp" );
             NSURL *thumbnail = [[url URLByDeletingPathExtension] URLByAppendingPathExtension:ext];
@@ -63,7 +64,7 @@
                     thumbnail = [thumbnail URLByAppendingPathComponent:lastPart];
                 }
             }
-            
+
             NSError *error = nil;
             if( [data writeToURL:thumbnail options:0 error:&error] != YES ) {
                 if( error != nil ) {
@@ -73,6 +74,8 @@
                 } else result( [FlutterError errorWithCode:@"IO Error" message:@"Failed to write data to file" details:nil] );
             } else {
                 NSString *fullpath = [thumbnail absoluteString];
+                NSArray *arrayOfComponents = [fullpath componentsSeparatedByString:@"."];
+                fullpath = [NSString stringWithFormat:@"%@%@.%@",arrayOfComponents[0],[VideoThumbnailPlugin randomStringWithLength:4], arrayOfComponents[1] ] ;
                 if([fullpath hasPrefix:@"file://"]) {
                     result([fullpath substringFromIndex:7]);
                 }
@@ -81,37 +84,48 @@
                 }
             }
         });
-        
+
     } else {
         result(FlutterMethodNotImplemented);
     }
 }
+NSString *letters = @"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
++(NSString *) randomStringWithLength: (int) len {
+
+    NSMutableString *randomString = [NSMutableString stringWithCapacity: len];
+
+    for (int i=0; i<len; i++) {
+         [randomString appendFormat: @"%C", [letters characterAtIndex: arc4random_uniform([letters length])]];
+    }
+
+    return randomString;
+}
 + (NSData *)generateThumbnail:(NSURL*)url format:(int)format maxHeight:(int)maxh maxWidth:(int)maxw timeMs:(int)timeMs quality:(int)quality {
-    
-    
-    
+
+
+
     AVURLAsset *asset=[[AVURLAsset alloc] initWithURL:url options:nil];
     AVAssetImageGenerator *imgGenerator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
-    
+
     imgGenerator.appliesPreferredTrackTransform = TRUE;
     imgGenerator.maximumSize = CGSizeMake((CGFloat)maxw, (CGFloat)maxh);
     imgGenerator.requestedTimeToleranceBefore = kCMTimeZero;
     imgGenerator.requestedTimeToleranceAfter = kCMTimeZero;
-    
+
     NSError *error = nil;
     CGImageRef cgImage = [imgGenerator copyCGImageAtTime:CMTimeMake(timeMs, 1000) actualTime:nil error:&error];
-    
+
     if( error != nil ) {
         NSLog(@"couldn't generate thumbnail, error:%@", error);
         return nil;
     }
-    
+
     if( format <= 1 ) {
         UIImage *thumbnail = [UIImage imageWithCGImage:cgImage];
-        
+
         CGImageRelease(cgImage);  // CGImageRef won't be released by ARC
-        
+
         if( format == 0 ) {
             CGFloat fQuality = ( CGFloat) ( quality * 0.01 );
             return UIImageJPEGRepresentation( thumbnail, fQuality );
@@ -126,17 +140,17 @@
         }
         CGImageAlphaInfo ainfo = CGImageGetAlphaInfo( cgImage );
         CGBitmapInfo binfo = CGImageGetBitmapInfo( cgImage );
-        
+
         CGDataProviderRef dataProvider = CGImageGetDataProvider(cgImage);
         CFDataRef imageData = CGDataProviderCopyData(dataProvider);
         UInt8 *rawData = ( UInt8 * ) CFDataGetBytePtr(imageData);
-        
+
         int width = ( int ) CGImageGetWidth(cgImage);
         int height = ( int ) CGImageGetHeight(cgImage);
         int stride = ( int ) CGImageGetBytesPerRow(cgImage);
         size_t ret_size = 0;
         uint8_t *output = NULL;
-        
+
         // preprocess the data for libwebp
         if( ainfo == kCGImageAlphaPremultipliedFirst || ainfo == kCGImageAlphaNoneSkipFirst ) {
             if( ( binfo & kCGBitmapByteOrderMask ) == kCGBitmapByteOrder32Little ) {
@@ -145,7 +159,7 @@
                     ret_size = WebPEncodeLosslessBGRA(rawData, width, height, stride, &output);
                 else
                     ret_size = WebPEncodeBGRA(rawData, width, height, stride, (float)quality, &output);
-            } else 
+            } else
                 if( ( binfo & kCGBitmapByteOrderMask ) == kCGBitmapByteOrder32Big ) {
                     // Big-endian ( iPhone Simulator )
                     for(int y = 0;y<height;y++) {
@@ -167,7 +181,7 @@
         CGDataProviderRelease(dataProvider);
         CFRelease(imageData);
         CGColorSpaceRelease(colorSpace);
-        
+
         if (ret_size == 0) {
             return nil;
         }
